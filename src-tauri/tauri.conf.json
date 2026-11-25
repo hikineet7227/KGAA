@@ -15,12 +15,13 @@
 				"title": "kgaa",
 				"label": "main",
 				"url": "/",
-				"fullscreen": true,
-				"transparent": true,
 				"decorations": false,
+				"fullscreen": false,
+				"transparent": true,
 				"alwaysOnTop": true,
 				"skipTaskbar": true,
 				"resizable": false,
+				"visible": false,
 				"shadow": false,
 				"focus": false
 			}

@@ -1,49 +1,34 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 use specta_typescript::Typescript;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
 use tauri_plugin_log::{Target, TargetKind};
-use tauri_specta::{Builder, collect_commands};
-
-#[derive(Serialize, Deserialize, Type)]
-#[serde(rename_all = "camelCase")]
-pub struct UserInfo {
-    pub id: u32,
-    pub username: String,
-}
+use tauri_specta::{Builder, Event, collect_commands, collect_events};
 
 #[tauri::command]
 #[specta::specta]
 fn set_overlay_interactive(app: AppHandle, interactive: bool) {
     if let Some(window) = app.get_webview_window("main") {
-        let _ = window.set_ignore_cursor_events(!interactive);
+        // let _ = window.set_ignore_cursor_events(!interactive);
         if interactive {
+            let _ = window.show();
             let _ = window.set_focus();
+        } else {
+            let _ = window.hide();
         }
-        let _ = app.emit("overlay-mode", interactive);
+        let _ = OverlayModeEvent(interactive).emit(&app);
     }
 }
 
-#[tauri::command]
-#[specta::specta]
-fn get_user() -> UserInfo {
-    UserInfo {
-        id: 1,
-        username: "dev_svelte".into(),
-    }
-}
-
-#[tauri::command]
-#[specta::specta]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+#[derive(Serialize, Deserialize, Clone, Type, Event)]
+pub struct OverlayModeEvent(pub bool);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let builder = Builder::<tauri::Wry>::new()
-        .commands(collect_commands![greet, get_user, set_overlay_interactive])
+        .commands(collect_commands![set_overlay_interactive])
+        .events(collect_events![OverlayModeEvent])
         .error_handling(tauri_specta::ErrorHandlingMode::Result);
 
     #[cfg(debug_assertions)]
@@ -78,7 +63,31 @@ pub fn run() {
             app.global_shortcut().register(toggle_shortcut)?;
 
             if let Some(main_win) = app.get_webview_window("main") {
-                let _ = main_win.set_ignore_cursor_events(true);
+                if let Ok(hwnd) = main_win.hwnd() {
+                    use windows::Win32::Foundation::HWND;
+                    use windows::Win32::Graphics::Dwm::{
+                        DWMWA_TRANSITIONS_FORCEDISABLED, DwmSetWindowAttribute,
+                    };
+                    let disable = 1;
+                    unsafe {
+                        let _ = DwmSetWindowAttribute(
+                            HWND(hwnd.0),
+                            DWMWA_TRANSITIONS_FORCEDISABLED,
+                            &disable as *const _ as *const _,
+                            std::mem::size_of::<i32>() as u32,
+                        );
+                    }
+                }
+                if let Ok(Some(main_monitor)) = main_win.primary_monitor() {
+                    let scale = main_monitor.scale_factor();
+                    let pos = main_monitor.position().to_logical::<f64>(scale);
+                    let size = main_monitor.size().to_logical::<f64>(scale);
+
+                    let _ = main_win.set_position(tauri::Position::Logical(pos));
+                    let _ = main_win.set_size(tauri::Size::Logical(size));
+                }
+                // let _ = main_win.set_ignore_cursor_events(true);
+                let _ = main_win.hide();
             }
             Ok(())
         })
