@@ -88,6 +88,14 @@
 		color: RGBA;
 	}
 
+	interface HistoryEntry {
+		brush: BrushType;
+		prevVertexCount: number;
+		nextVertexCount: number;
+		prevLastVertex: [number, number, number] | null;
+		nextLastVertex: [number, number, number] | null;
+	}
+
 	// =========================================================================
 	// 3. REACTIVE UI STATE
 	// =========================================================================
@@ -118,6 +126,9 @@
 	let uMatrixLoc: WebGLUniformLocation | null = null;
 	let uColorLoc: WebGLUniformLocation | null = null;
 	let aPosLoc = -1;
+
+	let undoStack: HistoryEntry[] = [];
+	let redoStack: HistoryEntry[] = [];
 
 	let activeStroke: ActiveStroke | null = null;
 	const batches: Record<BrushType, StrokeBatch | null> = {
@@ -550,11 +561,23 @@
 		if (activeStroke && activeStroke.vertexCount > 0) {
 			const targetBatch = batches[currentBrush];
 			if (targetBatch) {
+				const prevVertexCount = targetBatch.vertexCount;
+				const prevLastVertex = targetBatch.lastVertex;
+
 				const finalVerts = activeStroke.cpuData.subarray(
 					0,
 					activeStroke.vertexCount * 3,
 				);
 				appendToBatch(targetBatch, finalVerts);
+
+				undoStack.push({
+					brush: currentBrush,
+					prevVertexCount,
+					nextVertexCount: targetBatch.vertexCount,
+					prevLastVertex,
+					nextLastVertex: targetBatch.lastVertex,
+				});
+				redoStack.length = 0;
 			}
 			strokeCount += 1;
 			activeStroke.vertexCount = 0;
@@ -565,6 +588,31 @@
 		renderScene();
 	}
 
+	function undo() {
+		if (isDrawing || undoStack.length === 0) return;
+		const entry = undoStack.pop()!;
+		const batch = batches[entry.brush];
+		if (batch) {
+			batch.vertexCount = entry.prevVertexCount;
+			batch.lastVertex = entry.prevLastVertex;
+		}
+		redoStack.push(entry);
+		strokeCount = Math.max(0, strokeCount - 1);
+		renderScene();
+	}
+
+	function redo() {
+		if (isDrawing || redoStack.length === 0) return;
+		const entry = redoStack.pop()!;
+		const batch = batches[entry.brush];
+		if (batch) {
+			batch.vertexCount = entry.nextVertexCount;
+			batch.lastVertex = entry.nextLastVertex;
+		}
+		undoStack.push(entry);
+		strokeCount += 1;
+		renderScene();
+	}
 	function resetCamera() {
 		camera = { x: 0, y: 0, zoom: 2 };
 		requestRender();
@@ -583,6 +631,9 @@
 		strokeCount = 0;
 		currentPoints = [];
 		camera = { x: 0, y: 0, zoom: 2 };
+
+		undoStack.length = 0;
+		redoStack.length = 0;
 		renderScene();
 	}
 
@@ -688,6 +739,24 @@
 
 	function handleKeydown(e: KeyboardEvent) {
 		if (!isInteractive) return;
+
+		if (e.ctrlKey || e.metaKey) {
+			const key = e.key.toLowerCase();
+			if (key === "z") {
+				e.preventDefault();
+				e.shiftKey ? redo() : undo();
+				return;
+			}
+			if (key === "y") {
+				e.preventDefault();
+				redo();
+				return;
+			}
+			return;
+		}
+
+		if (e.altKey) return;
+
 		switch (e.key.toLowerCase()) {
 			case "escape":
 				closeOverlay();

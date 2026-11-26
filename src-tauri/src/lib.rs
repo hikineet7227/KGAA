@@ -63,6 +63,24 @@ pub fn run() {
             app.global_shortcut().register(toggle_shortcut)?;
 
             if let Some(main_win) = app.get_webview_window("main") {
+                let _ = main_win.with_webview(|webview| {
+                    #[cfg(target_os = "windows")]
+                    unsafe {
+                        use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2Settings3;
+                        use windows::core::{IUnknown, Interface};
+
+                        if let Ok(core) = webview.controller().CoreWebView2()
+                            && let Ok(settings) = core.Settings()
+                        {
+                            let unknown = IUnknown::from_raw(std::mem::transmute_copy(&settings));
+                            if let Ok(settings3) = unknown.cast::<ICoreWebView2Settings3>() {
+                                let _ = settings3.SetAreBrowserAcceleratorKeysEnabled(false);
+                            }
+                            std::mem::forget(unknown);
+                        }
+                    }
+                });
+
                 if let Ok(hwnd) = main_win.hwnd() {
                     use windows::Win32::Foundation::HWND;
                     use windows::Win32::Graphics::Dwm::{
@@ -78,6 +96,7 @@ pub fn run() {
                         );
                     }
                 }
+
                 if let Ok(Some(main_monitor)) = main_win.primary_monitor() {
                     let scale = main_monitor.scale_factor();
                     let pos = main_monitor.position().to_logical::<f64>(scale);
