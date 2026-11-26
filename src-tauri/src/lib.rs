@@ -63,6 +63,9 @@ pub fn run() {
             app.global_shortcut().register(toggle_shortcut)?;
 
             if let Some(main_win) = app.get_webview_window("main") {
+                // #[cfg(debug_assertions)]
+                // main_win.open_devtools();
+
                 let _ = main_win.with_webview(|webview| {
                     #[cfg(target_os = "windows")]
                     unsafe {
