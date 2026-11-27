@@ -21,13 +21,16 @@
 				"alwaysOnTop": true,
 				"skipTaskbar": true,
 				"resizable": false,
-				"visible": false,
 				"shadow": false,
 				"focus": false
 			}
 		],
 		"security": {
-			"csp": null
+			"csp": null,
+			"assetProtocol": {
+				"enable": true,
+				"scope": ["**"]
+			}
 		}
 	},
 	"bundle": {
